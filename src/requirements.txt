@@ -1,0 +1,12 @@
+pandas
+numpy
+matplotlib
+scikit-learn
+structlog
+thefuzz
+
+fastapi
+uvicorn
+jinja2
+python-multipart
+folium

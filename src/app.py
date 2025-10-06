@@ -1,20 +1,26 @@
-from fastapi import FastAPI, Request
-from fastapi.templating import Jinja2Templates
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi import FastAPI
+from fastapi.responses import HTMLResponse, JSONResponse
+from pydantic import BaseModel
+from uvicorn import run
 
 import structlog
 from .tools.get_city import get_city_by_name, get_cities_by_postal_code
-from .tools.map import generate_map
+from .tools.map import generate_map, ListCircuitsParams, CircuitParams
+from .tools.color_code import generate_distinct_colors
+
 
 logger = structlog.get_logger()
 
+
+class MapRequest(BaseModel):
+    city_name: str
+    dep_code: int | str
+    cluster_nbr: int = 1
+    clustering_method: str = "kmeans"
+    cluster_colors: list[str] | None = None
+
+
 app = FastAPI()
-templates = Jinja2Templates(directory="src/templates")
-
-
-@app.get("/", response_class=HTMLResponse)
-async def read_root(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
 
 
 @app.get("/get_city")
@@ -50,85 +56,69 @@ async def get_city(city: str = None, postal_code: str = None):
         return JSONResponse({"error": f"An error occurred: {str(e)}"}, status_code=500)
 
 
-@app.get("/map/{city_name}", response_class=HTMLResponse)
-async def show_city_map(request: Request, city_name: str, dep_code: str = None):
+@app.post("/map", response_class=HTMLResponse)
+async def get_city_map_html(request: MapRequest):
     """
-    Display a map page for the specified city.
+    Generate and return HTML for a city map with clustering.
 
     Args:
-        city_name: City name to display on the map
-        dep_code: Department code (optional)
+        request: MapRequest object containing the parameters.
+            - city_name: Name of the city.
+            - dep_code: Department code (as string, converted to int).
+            - cluster_nbr: Number of clusters (must be > 0).
+            - clustering_method: Method used for clustering (e.g., "kmeans").
+            - cluster_colors: List of hex colors for clusters (e.g., ["#ff0000", "#00ff00"]).
 
     Returns:
-        HTML response with the map template
+        HTMLResponse: Raw HTML of the Folium map for embedding.
     """
-    logger.info("Showing city map", city_name=city_name, dep_code=dep_code)
-
     try:
-        if not dep_code:
-            return JSONResponse(
-                {"error": "Department code is required to generate the map"},
-                status_code=400,
-            )
+        # # Validate dep_code
+        # try:
+        #     dep_code_int = int(dep_code)
+        # except ValueError:
+        #     return JSONResponse(
+        #         {"error": "Department code must be a valid integer"},
+        #         status_code=400,
+        #     )
 
-        # Convert dep_code to integer
-        try:
-            dep_code_int = int(dep_code)
-        except ValueError:
-            return JSONResponse(
-                {"error": "Department code must be a valid integer"},
-                status_code=400,
-            )
+        if (
+            not request.cluster_colors
+            or len(request.cluster_colors) < request.cluster_nbr
+        ):
+            # cluster_colors = make_color_code(request.cluster_nbr)
+            cluster_colors = generate_distinct_colors(request.cluster_nbr)
+        else:
+            cluster_colors = request.cluster_colors
 
-        # Generate the map using the generate_map function
-        folium_map = generate_map(city_name, dep_code_int)
+        # Create CircuitParams dynamically from cluster_colors
+        list_circuits = ListCircuitsParams(
+            nbr_circuits=request.cluster_nbr,
+            circuits=[
+                CircuitParams(nom=f"Cluster {i+1}", color=color)
+                for i, color in enumerate(cluster_colors[: request.cluster_nbr])
+            ],
+            clustering_method=request.clustering_method,
+        )
 
-        # Get the HTML content from the Folium map
+        # Generate the map
+        folium_map = generate_map(
+            city_name=request.city_name,
+            dep_code=request.dep_code,
+            list_circuits=list_circuits,  # Pass to generate_map if needed
+        )
+
+        # Return raw HTML (without template)
         map_html = folium_map._repr_html_()
-        map_html = map_html.replace(
-            '<div class="folium-map"', '<div id="map" class="folium-map"'
-        )
-
-        # Get the center coordinates for fallback display
-        center_lat = folium_map.location[0] if folium_map.location else 46.2276
-        center_lon = folium_map.location[1] if folium_map.location else 2.2137
-
-        return templates.TemplateResponse(
-            "map.html",
-            {
-                "request": request,
-                "city_name": city_name,
-                "dep_code": dep_code,
-                "latitude": center_lat,
-                "longitude": center_lon,
-                "map_html": map_html,
-            },
-        )
+        return HTMLResponse(content=map_html, status_code=200)
 
     except Exception as e:
-        logger.error("Error in show_city_map endpoint", error=str(e))
+        logger.error("Error generating map", error=str(e))
         return JSONResponse(
-            {"error": f"An error occurred while showing the city map: {str(e)}"},
+            {"error": f"Failed to generate map: {str(e)}"},
             status_code=500,
         )
 
 
-@app.get("/plot_city")
-async def plot_city(city: str, dep_code: str = None):
-    """
-    Redirect to the map page for the specified city.
-
-    Args:
-        city: City name to plot on the map
-        dep_code: Department code (optional)
-
-    Returns:
-        Redirect response to the map page
-    """
-    logger.info("Plotting city", city=city, dep_code=dep_code)
-
-    url = f"/map/{city}"
-    if dep_code:
-        url += f"?dep_code={dep_code}"
-
-    return RedirectResponse(url=url, status_code=302)
+if __name__ == "__main__":
+    run(app, host="0.0.0.0", port=8000)

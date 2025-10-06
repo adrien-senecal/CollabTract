@@ -1,10 +1,28 @@
 import folium
 import structlog
 import pandas as pd
-
+from pydantic import BaseModel
+import re
+from sklearn.cluster import KMeans
 from .csv_loading import get_df_adresse_locale
 
 logger = structlog.get_logger()
+
+
+class CircuitParams(BaseModel):
+    nom: str
+    color: str | None = None
+
+    # Check if the color is a valid hex color
+    if color and not re.match(r"^#([0-9a-fA-F]{6})$", color):
+        raise ValueError("Invalid hex color")
+
+
+class ListCircuitsParams(BaseModel):
+    nbr_circuits: int = 1
+    circuits: list[CircuitParams] = []
+    random_state: int = 42
+    clustering_method: str = "kmeans"
 
 
 def build_address(row):
@@ -38,18 +56,22 @@ def build_address(row):
     return full_address
 
 
-def generate_map(city: str, dep_code: int):
+def generate_map(
+    city_name: str,
+    dep_code: int,
+    list_circuits: ListCircuitsParams = ListCircuitsParams(),
+):
     """
     Generate a map for the specified city.
 
     Args:
-        city: City name
+        city_name: City name
         dep_code: Department code
-
+        list_circuits: List of circuits
     Returns:
         folium.Map: The generated map
     """
-    logger.info("Generating map", city=city, dep_code=dep_code)
+    logger.info("Generating map", city_name=city_name, dep_code=dep_code)
 
     # Use department code if provided, otherwise try to extract from city data
     try:
@@ -57,10 +79,12 @@ def generate_map(city: str, dep_code: int):
             logger.error("Department code must be an integer", dep_code=dep_code)
             raise ValueError("Department code must be an integer")
         df = get_df_adresse_locale(dep_code)
-        df = df[df["nom_commune"] == city]
+        df = df[df["nom_commune"] == city_name]
         if df.empty:
             logger.error(
-                "City not found in the department", city=city, dep_code=dep_code
+                "City not found in the department",
+                city_name=city_name,
+                dep_code=dep_code,
             )
             raise ValueError("City not found in the department")
     except Exception as e:
@@ -71,12 +95,42 @@ def generate_map(city: str, dep_code: int):
     center_lon = df["lon"].mean()
     logger.info("Center of the map", center_lat=center_lat, center_lon=center_lon)
     m = folium.Map(location=[center_lat, center_lon], zoom_start=14)
+
+    # Generate the circuits
+    if list_circuits.nbr_circuits > 1:
+        kmeans = KMeans(
+            n_clusters=list_circuits.nbr_circuits,
+            random_state=list_circuits.random_state,
+        )
+        kmeans.fit(df[["lat", "lon"]])
+        df["circuit"] = kmeans.labels_
+    else:
+        df["circuit"] = 0
+
     for _, row in df.iterrows():
         adresse = build_address(row)
-        folium.Marker([row["lat"], row["lon"]], popup=adresse).add_to(m)
-    # m.save("map.html")
+        circuit = row["circuit"]
+        color = list_circuits.circuits[circuit].color
+        folium.CircleMarker(
+            location=[row["lat"], row["lon"]],
+            radius=5,
+            color=color,
+            fill=True,
+            fill_color=color,
+            fill_opacity=0.6,
+            popup=adresse,
+        ).add_to(m)
+    m.save("map.html")
     return m
 
 
 if __name__ == "__main__":
-    generate_map("Paris")
+    list_circuits = ListCircuitsParams(
+        nbr_circuits=3,
+        circuits=[
+            CircuitParams(nom="Circuit 1", color="#ffff14"),
+            CircuitParams(nom="Circuit 2", color="#6e750e"),
+            CircuitParams(nom="Circuit 3", color="#ff028d"),
+        ],
+    )
+    generate_map("Assas", 34, list_circuits)

@@ -4,6 +4,7 @@ matplotlib
 scikit-learn
 structlog
 thefuzz
+pydantic
 
 fastapi
 uvicorn

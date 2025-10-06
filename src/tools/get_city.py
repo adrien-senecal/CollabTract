@@ -4,7 +4,6 @@ import pandas as pd
 from thefuzz import process
 import structlog
 from ..settings import COMMUNES_FRANCE_FILENAME
-from .validation import check_folder_path
 
 logger = structlog.get_logger()
 
@@ -24,13 +23,9 @@ def get_cities_by_postal_code(
         A list of city names associated with the postal code.
     """
     logger.info("Getting city by postal code", postal_code=postal_code)
-    postal_code = int(postal_code)
-    folder_path = check_folder_path(folder_path)
-    filepath = folder_path / COMMUNES_FRANCE_FILENAME
-    df = pd.read_csv(
-        filepath, compression="gzip", delimiter=",", low_memory=False, index_col=0
-    )
-    df = df[df["code_postal"] == postal_code]
+
+    df = pd.read_parquet(COMMUNES_FRANCE_FILENAME)
+    df = df[df["code_postal"] == str(postal_code)]
     city_department_records = []
     for city in df["nom_standard"].unique().tolist():
         res = df[df["nom_standard"] == city][["nom_standard", "dep_code"]]
@@ -57,11 +52,7 @@ def get_city_by_name(
     Retrieve the city name associated with a given postal code.
     """
     logger.info("Getting city by name", city_name=city_name)
-    folder_path = check_folder_path(folder_path)
-    filepath = folder_path / COMMUNES_FRANCE_FILENAME
-    df = pd.read_csv(
-        filepath, compression="gzip", delimiter=",", low_memory=False, index_col=0
-    )
+    df = pd.read_parquet(COMMUNES_FRANCE_FILENAME)
     list_city_name = df["nom_standard"].unique().tolist()
     city_names = process.extractBests(city_name, list_city_name, score_cutoff=80)
     city_names = filter_cities(city_names)

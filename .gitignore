@@ -418,4 +418,4 @@ FodyWeavers.xsd
 *.msp
 
 .vscode/
-/data/
+/data/csv

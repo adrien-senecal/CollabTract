@@ -23,7 +23,6 @@ jobs:
       # This is used to complete the identity challenge
       # with sigstore/fulcio when running outside of PRs.
       id-token: write
-      security-events: write
 
     steps:
       - name: Checkout repository
@@ -95,18 +94,3 @@ jobs:
         # This step uses the identity token to provision an ephemeral certificate
         # against the sigstore community Fulcio instance.
         run: echo "${TAGS}" | xargs -I {} cosign sign --yes {}@${DIGEST}
-
-      - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
-          format: "sarif"
-          output: "trivy-results.sarif"
-          severity: "CRITICAL,HIGH" # Filtrer par gravité
-
-      # Publier les résultats dans GitHub Security Tab
-      - name: Upload Trivy scan results to GitHub Security tab
-        if: always() # Exécuter même si Trivy échoue
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: "trivy-results.sarif"

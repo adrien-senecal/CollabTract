@@ -1,12 +1,19 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
 from uvicorn import run
+import time
+from datetime import datetime, timezone
 
 import structlog
 from .tools.get_city import get_city_by_name, get_cities_by_postal_code
 from .tools.map import generate_map, ListCircuitsParams, CircuitParams
 from .tools.color_code import generate_distinct_colors
+from . import __version__
+from .tools.health import (
+    check_database_connection,
+    HealthResponse,
+)
 
 
 logger = structlog.get_logger()
@@ -21,6 +28,59 @@ class MapRequest(BaseModel):
 
 
 app = FastAPI()
+
+# Track application start time for uptime calculation
+app_start_time = time.time()
+
+
+@app.get("/health", response_model=HealthResponse)
+async def health_check():
+    """
+    Health check endpoint to verify API and dependencies status.
+
+    Returns:
+        HealthResponse: Comprehensive health status including:
+        - Overall status (healthy/unhealthy)
+        - Timestamp
+        - Application version
+        - Uptime in seconds
+        - Individual component checks
+    """
+    try:
+        # Perform all health checks
+        database_check = check_database_connection()
+
+        # Determine overall status
+        all_checks = [database_check]
+        overall_status = (
+            "healthy"
+            if all(check["status"] == "healthy" for check in all_checks)
+            else "unhealthy"
+        )
+
+        # Calculate uptime
+        uptime = time.time() - app_start_time
+
+        if overall_status == "unhealthy":
+            logger.error("Health check failed", checks=all_checks)
+            raise HTTPException(
+                status_code=503, detail=f"Health check failed: {all_checks}"
+            )
+
+        return HealthResponse(
+            status=overall_status,
+            timestamp=datetime.now(timezone.utc).isoformat() + "Z",
+            version=__version__,
+            uptime=round(uptime, 2),
+            checks={
+                "database": database_check,
+            },
+        )
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        logger.error("Unexpected error in health check", error=str(e))
+        raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
 
 
 @app.get("/get_city")

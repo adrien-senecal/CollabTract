@@ -15,6 +15,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # Install system dependencies
 RUN apt-get update && \
     apt-get install -y gcc \
+    && pip install --upgrade pip \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching

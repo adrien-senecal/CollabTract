@@ -72,6 +72,7 @@ def generate_map(
         folium.Map: The generated map
     """
     logger.info("Generating map", city_name=city_name, dep_code=dep_code)
+    dep_code = int(dep_code)
 
     # Use department code if provided, otherwise try to extract from city data
     try:

@@ -1,8 +1,8 @@
-# CollabTract v1.1.0
+# CollabTract
 
 **Smart Door-to-Door and Flyering Route Planner**
 
-CollabTract is a web application designed to help optimize door-to-door distribution routes and flyering campaigns. Version 1.1 provides advanced city search functionality, interactive mapping capabilities, and intelligent clustering for route optimization in French cities and addresses.
+CollabTract is a web application designed to help optimize door-to-door distribution routes and flyering campaigns. It provides advanced city search functionality, interactive mapping capabilities, and intelligent clustering for route optimization in French cities and addresses.
 
 ## 🚀 Features
 

@@ -133,14 +133,6 @@ async def get_city_map_html(request: MapRequest):
         HTMLResponse: Raw HTML of the Folium map for embedding.
     """
     try:
-        # # Validate dep_code
-        # try:
-        #     dep_code_int = int(dep_code)
-        # except ValueError:
-        #     return JSONResponse(
-        #         {"error": "Department code must be a valid integer"},
-        #         status_code=400,
-        #     )
 
         if (
             not request.cluster_colors
@@ -165,7 +157,7 @@ async def get_city_map_html(request: MapRequest):
         folium_map = generate_map(
             city_name=request.city_name,
             dep_code=request.dep_code,
-            list_circuits=list_circuits,  # Pass to generate_map if needed
+            list_circuits=list_circuits,
         )
 
         # Return raw HTML (without template)

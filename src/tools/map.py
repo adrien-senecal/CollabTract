@@ -116,12 +116,15 @@ def generate_map(
             )
             kmeans.fit(df[["lat", "lon"]])
             df["cluster"] = kmeans.labels_
+            # Count the number of addresses in each cluster
+            stats_cluster = df.value_counts("cluster").to_frame()
+            stats_cluster["length"] = None
         elif clustering_method == "balanced_length":
-            df = make_balanced_clustering(
+            df, stats_cluster = make_balanced_clustering(
                 df, "length", list_circuits.nbr_circuits, balance_tolerance=0.05
             )
         elif clustering_method == "balanced_count":
-            df = make_balanced_clustering(
+            df, stats_cluster = make_balanced_clustering(
                 df, "count", list_circuits.nbr_circuits, balance_tolerance=0.05
             )
         else:
@@ -143,8 +146,7 @@ def generate_map(
             fill_opacity=0.6,
             popup=adresse,
         ).add_to(m)
-    # m.save("map.html")
-    return m
+    return m, stats_cluster.to_dict()
 
 
 if __name__ == "__main__":
@@ -155,6 +157,8 @@ if __name__ == "__main__":
             CircuitParams(nom="Circuit 2", color="#6e750e"),
             CircuitParams(nom="Circuit 3", color="#ff028d"),
         ],
+        clustering_method="balanced_length",
     )
-    m = generate_map("Anduze", 30, list_circuits, method="balanced_length")
+    m, stats_cluster = generate_map("Anduze", 30, list_circuits)
     m.save("map.html")
+    print(stats_cluster)

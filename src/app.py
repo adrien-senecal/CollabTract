@@ -1,5 +1,5 @@
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from uvicorn import run
 import time
@@ -116,10 +116,10 @@ async def get_city(city: str = None, postal_code: str = None):
         return JSONResponse({"error": f"An error occurred: {str(e)}"}, status_code=500)
 
 
-@app.post("/map", response_class=HTMLResponse)
+@app.post("/map", response_class=JSONResponse)
 async def get_city_map_html(request: MapRequest):
     """
-    Generate and return HTML for a city map with clustering.
+    Generate and return HTML for a city map with clustering and stats_cluster.
 
     Args:
         request: MapRequest object containing the parameters.
@@ -130,7 +130,7 @@ async def get_city_map_html(request: MapRequest):
             - cluster_colors: List of hex colors for clusters (e.g., ["#ff0000", "#00ff00"]).
 
     Returns:
-        HTMLResponse: Raw HTML of the Folium map for embedding.
+        JSONResponse: Raw HTML of the Folium map for embedding and stats_cluster
     """
     try:
 
@@ -154,7 +154,7 @@ async def get_city_map_html(request: MapRequest):
         )
 
         # Generate the map
-        folium_map = generate_map(
+        folium_map, stats_cluster = generate_map(
             city_name=request.city_name,
             dep_code=request.dep_code,
             list_circuits=list_circuits,
@@ -162,7 +162,13 @@ async def get_city_map_html(request: MapRequest):
 
         # Return raw HTML (without template)
         map_html = folium_map._repr_html_()
-        return HTMLResponse(content=map_html, status_code=200)
+        return JSONResponse(
+            content={
+                "map_html": map_html,
+                "stats_cluster": stats_cluster,
+            },
+            status_code=200,
+        )
 
     except Exception as e:
         logger.error("Error generating map", error=str(e))

@@ -161,12 +161,11 @@ def balanced_spatial_clustering(
     result_df = df.copy()
     result_df["cluster"] = exploded_df.groupby(exploded_df.index)["cluster"].first()
 
-    logger.info(
-        f"Clustering Complete for {column_to_balance}",
-        result_df=result_df.groupby("cluster").agg({"count": "sum", "length": "sum"}),
-    )
+    stats_cluster = result_df.groupby("cluster").agg({"count": "sum", "length": "sum"})
+    logger.info(f"Clustering Complete for {column_to_balance}")
+    logger.info(stats_cluster)
     logger.info("Clustering Complete")
-    return result_df
+    return result_df, stats_cluster
 
 
 def add_cluster_to_df(df: pd.DataFrame, df_cluster: pd.DataFrame) -> pd.DataFrame:
@@ -189,11 +188,11 @@ def make_balanced_clustering(
     Make a balanced clustering of the df dataframe.
     """
     df_streets = get_street_data(df)
-    df_clustered = balanced_spatial_clustering(
+    df_clustered, stats_cluster = balanced_spatial_clustering(
         df_streets, column_to_balance, n_clusters, balance_tolerance
     )
     df = add_cluster_to_df(df, df_clustered)
-    return df
+    return df, stats_cluster
 
 
 if __name__ == "__main__":

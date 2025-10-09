@@ -5,6 +5,7 @@ from pydantic import BaseModel
 import re
 from sklearn.cluster import KMeans
 from .csv_loading import get_df_adresse_locale
+from .clustering import make_balanced_clustering
 
 logger = structlog.get_logger()
 
@@ -92,6 +93,14 @@ def generate_map(
         logger.error("Error generating map", error=str(e))
         raise ValueError("Error generating map")
 
+    try:
+        df = df[
+            ["numero", "rep", "nom_voie", "code_postal", "nom_commune", "lat", "lon"]
+        ]
+    except KeyError as e:
+        logger.error("Error generating map", error=str(e))
+        raise ValueError("Columns not found in the dataframe")
+    df["address"] = df.apply(build_address, axis=1)
     center_lat = df["lat"].mean()
     center_lon = df["lon"].mean()
     logger.info("Center of the map", center_lat=center_lat, center_lon=center_lon)
@@ -99,18 +108,31 @@ def generate_map(
 
     # Generate the circuits
     if list_circuits.nbr_circuits > 1:
-        kmeans = KMeans(
-            n_clusters=list_circuits.nbr_circuits,
-            random_state=list_circuits.random_state,
-        )
-        kmeans.fit(df[["lat", "lon"]])
-        df["circuit"] = kmeans.labels_
+        clustering_method = list_circuits.clustering_method
+        if clustering_method == "kmeans":
+            kmeans = KMeans(
+                n_clusters=list_circuits.nbr_circuits,
+                random_state=list_circuits.random_state,
+            )
+            kmeans.fit(df[["lat", "lon"]])
+            df["cluster"] = kmeans.labels_
+        elif clustering_method == "balanced_length":
+            df = make_balanced_clustering(
+                df, "length", list_circuits.nbr_circuits, balance_tolerance=0.05
+            )
+        elif clustering_method == "balanced_count":
+            df = make_balanced_clustering(
+                df, "count", list_circuits.nbr_circuits, balance_tolerance=0.05
+            )
+        else:
+            logger.error("Invalid method", method=clustering_method)
+            raise ValueError("Invalid method")
     else:
-        df["circuit"] = 0
+        df["cluster"] = 0
 
     for _, row in df.iterrows():
-        adresse = build_address(row)
-        circuit = row["circuit"]
+        adresse = row["address"]
+        circuit = row["cluster"]
         color = list_circuits.circuits[circuit].color
         folium.CircleMarker(
             location=[row["lat"], row["lon"]],
@@ -121,7 +143,7 @@ def generate_map(
             fill_opacity=0.6,
             popup=adresse,
         ).add_to(m)
-    m.save("map.html")
+    # m.save("map.html")
     return m
 
 
@@ -134,4 +156,5 @@ if __name__ == "__main__":
             CircuitParams(nom="Circuit 3", color="#ff028d"),
         ],
     )
-    generate_map("Assas", 34, list_circuits)
+    m = generate_map("Anduze", 30, list_circuits, method="balanced_length")
+    m.save("map.html")

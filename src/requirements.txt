@@ -5,6 +5,7 @@ scikit-learn
 structlog
 thefuzz
 pydantic
+k_means_constrained
 
 fastapi
 uvicorn

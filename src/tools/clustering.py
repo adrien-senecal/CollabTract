@@ -1,6 +1,6 @@
 from math import radians, cos, sin, sqrt, atan2
 import pandas as pd
-from k_means_constrained import KMeansConstrained
+from sklearn.cluster import KMeans
 import structlog
 
 logger = structlog.get_logger()
@@ -97,70 +97,21 @@ def get_street_data(df: pd.DataFrame) -> pd.DataFrame:
     return result
 
 
-def balanced_spatial_clustering(
-    df: pd.DataFrame,
-    column_to_balance: str,
-    n_clusters: int,
-    balance_tolerance: float = 0.1,
+def weighted_spatial_clustering(
+    df: pd.DataFrame, column_to_balance: str, n_clusters: int
 ):
-    """
-    Performs clustering on latitude and longitude while balancing the sum of `column_to_balance` across clusters.
-    Uses a data "explosion" technique to transform the problem into balancing the number of points per cluster.
-
-    Args:
-        df (pd.DataFrame): DataFrame with 'lat', 'lon', and `column_to_balance` columns.
-        column_to_balance (str): Column to balance across clusters.
-        n_clusters (int): Number of clusters to create.
-        balance_tolerance (float): Tolerance for cluster size deviation (0-1). Default: 0.1.
-
-    Returns:
-        pd.DataFrame: Original DataFrame with an added 'cluster' column.
-    """
-    # Validate input columns
-    required_columns = {"lat", "lon", column_to_balance}
-    if not required_columns.issubset(df.columns):
-        missing = required_columns - set(df.columns)
-        raise ValueError(f"Input DataFrame is missing required columns: {missing}")
-
-    logger.info("Starting Balanced Spatial Clustering")
-
-    # Ensure the balancing column is integer
-    if df[column_to_balance].dtype != "int":
-        logger.warning(
-            f"Warning: '{column_to_balance}' column is not integer. Casting to int for duplication."
-        )
-        df[column_to_balance] = df[column_to_balance].astype(int)
-
-    # Explode DataFrame based on the balancing column
-    exploded_df = df.loc[df.index.repeat(df[column_to_balance])].copy()
-
-    # Calculate ideal cluster sizes
-    n_points_exploded = len(exploded_df)
-    ideal_size_per_cluster = n_points_exploded / n_clusters
-    size_min = int(ideal_size_per_cluster * (1 - balance_tolerance))
-    size_max = int(ideal_size_per_cluster * (1 + balance_tolerance))
-    logger.info(
-        f"Ideal cluster sizes for {column_to_balance}",
-        size_min=size_min,
-        size_max=size_max,
-    )
-
-    # Fit constrained K-Means
-    X = exploded_df[["lat", "lon"]]
-    clf = KMeansConstrained(
-        n_clusters=n_clusters,
-        size_min=size_min,
-        size_max=size_max,
-        random_state=42,
-        n_init=10,
-    )
-    clf.fit(X)
-
-    # Assign clusters back to the original DataFrame
-    exploded_df["cluster"] = clf.labels_
+    logger.info("Starting Weighted Spatial Clustering")
+    logger.info(f"Clustering {column_to_balance} with {n_clusters} clusters")
     result_df = df.copy()
-    result_df["cluster"] = exploded_df.groupby(exploded_df.index)["cluster"].first()
-
+    X = df[["lat", "lon"]].values
+    if column_to_balance is None:
+        weights = None
+    else:
+        weights = df[column_to_balance].values
+    kmeans = KMeans(n_clusters=n_clusters, random_state=42).fit(
+        X, sample_weight=weights
+    )
+    result_df["cluster"] = kmeans.labels_
     stats_cluster = result_df.groupby("cluster").agg({"count": "sum", "length": "sum"})
     logger.info(f"Clustering Complete for {column_to_balance}")
     logger.info(stats_cluster)
@@ -182,14 +133,14 @@ def make_balanced_clustering(
     df: pd.DataFrame,
     column_to_balance: str,
     n_clusters: int,
-    balance_tolerance: float = 0.1,
 ) -> pd.DataFrame:
     """
     Make a balanced clustering of the df dataframe.
     """
     df_streets = get_street_data(df)
-    df_clustered, stats_cluster = balanced_spatial_clustering(
-        df_streets, column_to_balance, n_clusters, balance_tolerance
+
+    df_clustered, stats_cluster = weighted_spatial_clustering(
+        df_streets, column_to_balance, n_clusters
     )
     df = add_cluster_to_df(df, df_clustered)
     return df, stats_cluster

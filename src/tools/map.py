@@ -109,23 +109,18 @@ def generate_map(
     # Generate the circuits
     if list_circuits.nbr_circuits > 1:
         clustering_method = list_circuits.clustering_method
+
         if clustering_method == "kmeans":
-            kmeans = KMeans(
-                n_clusters=list_circuits.nbr_circuits,
-                random_state=list_circuits.random_state,
+            df, stats_cluster = make_balanced_clustering(
+                df, None, list_circuits.nbr_circuits
             )
-            kmeans.fit(df[["lat", "lon"]])
-            df["cluster"] = kmeans.labels_
-            # Count the number of addresses in each cluster
-            stats_cluster = df.value_counts("cluster").to_frame()
-            stats_cluster["length"] = None
         elif clustering_method == "balanced_length":
             df, stats_cluster = make_balanced_clustering(
-                df, "length", list_circuits.nbr_circuits, balance_tolerance=0.05
+                df, "length", list_circuits.nbr_circuits
             )
         elif clustering_method == "balanced_count":
             df, stats_cluster = make_balanced_clustering(
-                df, "count", list_circuits.nbr_circuits, balance_tolerance=0.05
+                df, "count", list_circuits.nbr_circuits
             )
         else:
             logger.error("Invalid method", method=clustering_method)

@@ -3,7 +3,6 @@ import structlog
 import pandas as pd
 from pydantic import BaseModel
 import re
-from sklearn.cluster import KMeans
 from .csv_loading import get_df_adresse_locale
 from .clustering import make_balanced_clustering
 
@@ -127,11 +126,14 @@ def generate_map(
             raise ValueError("Invalid method")
     else:
         df["cluster"] = 0
+        stats_cluster = pd.DataFrame({"count": [len(df)], "length": None})
+    for i in range(list_circuits.nbr_circuits):
+        stats_cluster.loc[i, "color"] = list_circuits.circuits[i].color
 
     for _, row in df.iterrows():
         adresse = row["address"]
         circuit = row["cluster"]
-        color = list_circuits.circuits[circuit].color
+        color = stats_cluster["color"][circuit]
         folium.CircleMarker(
             location=[row["lat"], row["lon"]],
             radius=5,

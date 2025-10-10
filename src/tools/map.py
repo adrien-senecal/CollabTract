@@ -3,7 +3,6 @@ import structlog
 import pandas as pd
 from pydantic import BaseModel
 import re
-from sklearn.cluster import KMeans
 from .csv_loading import get_df_adresse_locale
 from .clustering import make_balanced_clustering
 
